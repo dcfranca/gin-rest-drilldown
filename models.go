@@ -1,13 +1,14 @@
 package main
 
 import (
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"gorm.io/driver/mysql"
+	_ "gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 type User struct {
-	gorm.Model
+	ID        uint64  `json:"id"`
 	Username  *string `json:"username,omitempty"`
 	FirstName *string `json:"first_name,omitempty"`
 	LastName  *string `json:"last_name,omitempty"`
@@ -17,13 +18,15 @@ type User struct {
 var DB *gorm.DB
 
 func ConnectDatabase(connectionString string) {
-	database, err := gorm.Open("mysql", connectionString)
+	database, err := gorm.Open(mysql.Open(connectionString))
 
 	if err != nil {
 		panic("Failed to connect to database!")
 	}
 
-	database.AutoMigrate(&User{})
-
 	DB = database
+}
+
+func MigrateTables() {
+	DB.AutoMigrate(&User{})
 }
