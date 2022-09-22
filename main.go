@@ -396,6 +396,11 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err})
 		}
 
+		if err = DB.First(&item, id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
+			return
+		}
+
 		if err := DB.Delete(&item, id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return

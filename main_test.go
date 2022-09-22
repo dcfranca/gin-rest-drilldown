@@ -641,6 +641,7 @@ func TestGetItem(t *testing.T) {
 	book := Book{Title: stringPtr("Fight Club"), AuthorID: author.ID, Pages: intPtr(279)}
 	DB.Create(&book)
 
+	// Test Get item success
 	w := httptest.NewRecorder()
 	singleUrl := fmt.Sprintf("/books/%v", book.ID)
 	req, _ := http.NewRequest(http.MethodGet, singleUrl, nil)
@@ -654,6 +655,7 @@ func TestGetItem(t *testing.T) {
 	assert.Equal(t, "Fight Club", dataItem["title"])
 	assert.Equal(t, float64(author.ID), dataItem["author_id"])
 
+	// Test Get item from other table success
 	w = httptest.NewRecorder()
 	singleUrl = fmt.Sprintf("/authors/%v", author.ID)
 	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
@@ -666,12 +668,14 @@ func TestGetItem(t *testing.T) {
 	assert.Equal(t, float64(author.ID), dataItem["id"])
 	assert.Equal(t, "Chuck Palahniuk", dataItem["name"])
 
+	// Test Get item non existent
 	w = httptest.NewRecorder()
 	singleUrl = "/books/999"
 	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
+	// Test Get item invalid string id
 	w = httptest.NewRecorder()
 	singleUrl = "/books/invalid-id"
 	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
@@ -746,7 +750,53 @@ func TestInserts(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
+	// TODO: Test trying to update required field to empty
+	// TODO: Test trying to update with non existent record
+	// TODO: Test trying to update with non existent dependence / Foreign key
+	// TODO: Test Update successful
 }
 
 func TestDeletes(t *testing.T) {
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&Book{})
+	DB.AutoMigrate(&Author{})
+	registerModel(router, Book{}, "books")
+
+	author := Author{Name: stringPtr("Chuck Palahniuk")}
+	DB.Create(&author)
+
+	book := Book{Title: stringPtr("Fight Club"), AuthorID: author.ID, Pages: intPtr(279)}
+	DB.Create(&book)
+
+	// Test Delete item success
+	w := httptest.NewRecorder()
+	singleUrl := fmt.Sprintf("/books/%v", book.ID)
+	req, _ := http.NewRequest(http.MethodDelete, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// Test Delete item non existent
+	w = httptest.NewRecorder()
+	singleUrl = "/books/999"
+	req, _ = http.NewRequest(http.MethodDelete, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test Delete item invalid string id
+	w = httptest.NewRecorder()
+	singleUrl = "/books/invalid-id"
+	req, _ = http.NewRequest(http.MethodDelete, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	// Test Get item after deletion
+	w = httptest.NewRecorder()
+	singleUrl = fmt.Sprintf("/books/%v", book.ID)
+	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
 }
