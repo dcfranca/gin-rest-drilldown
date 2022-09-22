@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -8,7 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/iancoleman/strcase"
+	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 )
@@ -168,6 +171,10 @@ func removePlural(s string) string {
 	return s
 }
 
+func IsTestRun() bool {
+	return flag.Lookup("test.v").Value.(flag.Getter).Get().(bool)
+}
+
 func registerModel[M any](r *gin.Engine, m M, resource string) {
 
 	path := "/" + resource
@@ -176,7 +183,13 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 	r.GET(path, func(c *gin.Context) {
 		qmap := c.Request.URL.Query()
 		var errors []string
-		q := DB.Debug().Table(resource)
+
+		var q *gorm.DB
+		if IsTestRun() {
+			q = DB.Debug().Table(resource)
+		} else {
+			q = DB.Table(resource)
+		}
 
 		selectChan := make(chan Select)
 		condChan := make(chan Condition)
@@ -329,14 +342,25 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 	r.POST(path, func(c *gin.Context) {
 		var input M
 		if err := c.BindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			ve, ok := err.(validator.ValidationErrors)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, nil)
+			}
+
+			errors := []string{}
+			for _, e := range ve {
+				errors = append(errors, fmt.Sprintf("%v : failed on tag validation: %v", e.Field(), e.ActualTag()))
+			}
+
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errors})
+
 			return
 		}
 
 		if err := DB.Create(&input).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"errors": []string{err.Error()}})
 		} else {
-			c.JSON(http.StatusCreated, gin.H{"data": input})
+			c.JSON(http.StatusCreated, gin.H{"data": input, "errors": []string{}})
 		}
 	})
 

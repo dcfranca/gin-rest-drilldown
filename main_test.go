@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,7 +23,7 @@ import (
 
 type Author struct {
 	ID        uint64  `json:"id"`
-	Name      *string `json:"name" gorm:"uniqueIndex,not null"`
+	Name      *string `json:"name" gorm:"index:idx_name,unique" binding:"required"`
 	Books     []Book
 	UpdatedAt uint8 `json:"updated_at,omitempty"`
 	CreatedAt uint8 `json:"created_at,omitempty"`
@@ -31,11 +32,16 @@ type Author struct {
 type Book struct {
 	ID        uint64  `json:"id"`
 	Title     *string `json:"title,omitempty"`
-	AuthorID  uint64  `json:"author_id,omitempty"`
+	AuthorID  uint64  `json:"author_id,omitempty" gorm:"not null" binding:"required"`
 	Genre     *string `json:"genre,omitempty"`
 	Pages     *int    `json:"pages,omitempty"`
 	UpdatedAt uint64  `json:"updated_at,omitempty"`
 	CreatedAt uint64  `json:"created_at,omitempty"`
+}
+
+func init() {
+	testing.Init()
+	flag.Parse()
 }
 
 func CreateTestContainer(ctx context.Context, dbname string) (testcontainers.Container, *sql.DB, string, error) {
@@ -129,6 +135,9 @@ func TestFullFlow(t *testing.T) {
 	DB.AutoMigrate(&Author{})
 	registerModel(router, Book{}, "books")
 
+	author := Author{Name: stringPtr("Chuck Palahniuk")}
+	DB.Create(&author)
+
 	path := "/books"
 
 	// Test get users empty
@@ -144,7 +153,7 @@ func TestFullFlow(t *testing.T) {
 
 	// Test insert new record
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"title":"Fight Club"}`))
+	req, _ = http.NewRequest(http.MethodPost, path, bytes.NewBufferString(fmt.Sprintf(`{"title":"Fight Club", "author_id": %v}`, author.ID)))
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -178,7 +187,7 @@ func TestFullFlow(t *testing.T) {
 
 	// Update record
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodPut, singleUrl, bytes.NewBufferString(`{"authorID": 1, "pages": 279}`))
+	req, _ = http.NewRequest(http.MethodPut, singleUrl, bytes.NewBufferString(`{"author_id": 1, "pages": 279}`))
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
@@ -265,7 +274,6 @@ func TestQueries(t *testing.T) {
 
 	var response map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &response)
-	fmt.Println("RESPONSE: ", response)
 	dataItems := response["data"].([]interface{})
 	assert.Len(t, dataItems, len(books))
 	assert.Equal(t, float64(1), dataItems[0].(map[string]interface{})["id"])
@@ -484,7 +492,6 @@ func TestQueries(t *testing.T) {
 
 	json.Unmarshal(w.Body.Bytes(), &response)
 	dataItems, _ = response["data"].([]interface{})
-	fmt.Println("ERROR:", response["errors"])
 	assert.Len(t, dataItems, 3)
 	assert.Equal(t, "Fight Club", dataItems[0].(map[string]interface{})["title"])
 	assert.Equal(t, "Haunted", dataItems[1].(map[string]interface{})["title"])
@@ -614,17 +621,128 @@ func TestQueries(t *testing.T) {
 	dataItems, _ = response["data"].([]interface{})
 	assert.Len(t, dataItems, 8)
 
-	// Improve standard way to get table name
-
-	// TODO: Add concurrency on queries
+	// TODO: Improve standard way to get table name
 	// TODO: Why integers are float?
 }
 
 func TestGetItem(t *testing.T) {
-	//
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&Book{})
+	DB.AutoMigrate(&Author{})
+	registerModel(router, Book{}, "books")
+	registerModel(router, Author{}, "authors")
+
+	author := Author{Name: stringPtr("Chuck Palahniuk")}
+	DB.Create(&author)
+
+	book := Book{Title: stringPtr("Fight Club"), AuthorID: author.ID, Pages: intPtr(279)}
+	DB.Create(&book)
+
+	w := httptest.NewRecorder()
+	singleUrl := fmt.Sprintf("/books/%v", book.ID)
+	req, _ := http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItem, _ := response["data"].(map[string]interface{})
+	assert.Equal(t, float64(book.ID), dataItem["id"])
+	assert.Equal(t, "Fight Club", dataItem["title"])
+	assert.Equal(t, float64(author.ID), dataItem["author_id"])
+
+	w = httptest.NewRecorder()
+	singleUrl = fmt.Sprintf("/authors/%v", author.ID)
+	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItem, _ = response["data"].(map[string]interface{})
+	assert.Equal(t, float64(author.ID), dataItem["id"])
+	assert.Equal(t, "Chuck Palahniuk", dataItem["name"])
+
+	w = httptest.NewRecorder()
+	singleUrl = "/books/999"
+	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	w = httptest.NewRecorder()
+	singleUrl = "/books/invalid-id"
+	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestInserts(t *testing.T) {
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&Book{})
+	DB.AutoMigrate(&Author{})
+	registerModel(router, Book{}, "books")
+	registerModel(router, Author{}, "authors")
+
+	var response map[string]interface{}
+	path := "/books"
+
+	// Test insert new record without author
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"title":"Fight Club"}`))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Equal(t, "AuthorID : failed on tag validation: required", response["errors"].([]interface{})[0])
+
+	// Test insert dependence
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/authors", bytes.NewBufferString(`{"name":"Chuck Palahniuk"}`))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	json.Unmarshal(w.Body.Bytes(), &response)
+	data := response["data"].(map[string]interface{})
+	assert.Equal(t, float64(1), data["id"])
+
+	// Test insert with all required and dependence
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, path, bytes.NewBufferString(fmt.Sprintf(`{"author_id": %v, "title": "Fight Club"}`, data["id"])))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	json.Unmarshal(w.Body.Bytes(), &response)
+	data = response["data"].(map[string]interface{})
+	assert.Equal(t, "Fight Club", data["title"])
+
+	// Test query inserted with dependence
+	w = httptest.NewRecorder()
+	url := fmt.Sprintf("%v?fields=title,authors.name", path)
+	req, _ = http.NewRequest(http.MethodGet, url, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItems, _ := response["data"].([]interface{})
+	assert.Len(t, dataItems, 1)
+	assert.Equal(t, float64(1), dataItems[0].(map[string]interface{})["id"])
+	assert.Equal(t, "Fight Club", dataItems[0].(map[string]interface{})["title"])
+	assert.Equal(t, "Chuck Palahniuk", dataItems[0].(map[string]interface{})["author.name"])
+
+	// Test insert duplicated unique key
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/authors", bytes.NewBufferString(`{"name":"Chuck Palahniuk"}`))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Equal(t, "Error 1062: Duplicate entry 'Chuck Palahniuk' for key 'authors.idx_name'", response["errors"].([]interface{})[0])
 }
 
 func TestUpdates(t *testing.T) {
