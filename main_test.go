@@ -31,8 +31,8 @@ type Author struct {
 
 type Book struct {
 	ID        uint64  `json:"id"`
-	Title     *string `json:"title,omitempty"`
-	AuthorID  uint64  `json:"author_id,omitempty" gorm:"not null" binding:"required"`
+	Title     *string `json:"title,omitempty" gorm:"not null"`
+	AuthorID  uint64  `json:"author_id,omitempty" binding:"required"`
 	Genre     *string `json:"genre,omitempty"`
 	Pages     *int    `json:"pages,omitempty"`
 	UpdatedAt uint64  `json:"updated_at,omitempty"`
@@ -715,6 +715,16 @@ func TestInserts(t *testing.T) {
 	data := response["data"].(map[string]interface{})
 	assert.Equal(t, float64(1), data["id"])
 
+	// Test insert with not null field empty
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, path, bytes.NewBufferString(fmt.Sprintf(`{"author_id": %v, "title": null}`, data["id"])))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	json.Unmarshal(w.Body.Bytes(), &response)
+	errors := response["errors"].([]interface{})
+	assert.Equal(t, "Error 1048: Column 'title' cannot be null", errors[0])
+
 	// Test insert with all required and dependence
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(http.MethodPost, path, bytes.NewBufferString(fmt.Sprintf(`{"author_id": %v, "title": "Fight Club"}`, data["id"])))
@@ -750,10 +760,56 @@ func TestInserts(t *testing.T) {
 }
 
 func TestUpdates(t *testing.T) {
-	// TODO: Test trying to update required field to empty
-	// TODO: Test trying to update with non existent record
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&Book{})
+	DB.AutoMigrate(&Author{})
+	registerModel(router, Book{}, "books")
+
+	author := Author{Name: stringPtr("Chuck Palahniuk")}
+	DB.Create(&author)
+
+	book := Book{Title: stringPtr("Fight Club"), AuthorID: author.ID, Pages: intPtr(279)}
+	DB.Create(&book)
+
+	var response map[string]interface{}
+
+	// Test trying to update with non existent record
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/books/999", bytes.NewBufferString(`{"title":"Invalid"}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
 	// TODO: Test trying to update with non existent dependence / Foreign key
-	// TODO: Test Update successful
+	// w = httptest.NewRecorder()
+	// req, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("/books/%v", book.ID), bytes.NewBufferString(`{"author_id": 999}`))
+	// router.ServeHTTP(w, req)
+
+	// assert.Equal(t, http.StatusBadRequest, w.Code)
+	// json.Unmarshal(w.Body.Bytes(), &response)
+	// assert.Equal(t, "AuthorID : failed on tag validation: required", response["errors"].([]interface{})[0])
+
+	// Test Update successful
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("/books/%v", book.ID), bytes.NewBufferString(`{"genre": "drama"}`))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	w = httptest.NewRecorder()
+	url := fmt.Sprintf("/books/%v", book.ID)
+	req, _ = http.NewRequest(http.MethodGet, url, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	data := response["data"]
+	assert.Equal(t, float64(1), data.(map[string]interface{})["id"])
+	assert.Equal(t, "Fight Club", data.(map[string]interface{})["title"])
+	assert.Equal(t, "drama", data.(map[string]interface{})["genre"])
+	assert.Equal(t, float64(279), data.(map[string]interface{})["pages"])
 }
 
 func TestDeletes(t *testing.T) {
@@ -798,5 +854,4 @@ func TestDeletes(t *testing.T) {
 	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
-
 }

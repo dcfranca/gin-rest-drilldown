@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/go-sql-driver/mysql"
 	"github.com/iancoleman/strcase"
 	"gorm.io/gorm"
 
@@ -329,6 +330,7 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 		id, err := getIDParam(c)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err})
+			return
 		}
 
 		if err = DB.First(&item, id).Error; err != nil {
@@ -345,6 +347,7 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 			ve, ok := err.(validator.ValidationErrors)
 			if !ok {
 				c.JSON(http.StatusInternalServerError, nil)
+				return
 			}
 
 			errors := []string{}
@@ -353,14 +356,22 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 			}
 
 			c.JSON(http.StatusBadRequest, gin.H{"errors": errors})
-
 			return
 		}
 
 		if err := DB.Create(&input).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"errors": []string{err.Error()}})
+			me, ok := err.(*mysql.MySQLError)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, nil)
+				return
+			}
+
+			errors := []string{fmt.Sprintf("Error %v: %v", me.Number, me.Message)}
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errors})
+			return
 		} else {
 			c.JSON(http.StatusCreated, gin.H{"data": input, "errors": []string{}})
+			return
 		}
 	})
 
@@ -372,18 +383,23 @@ func registerModel[M any](r *gin.Engine, m M, resource string) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err})
 		}
 
-		if err := c.BindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
 		if err = DB.First(&item, id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return
 		}
 
+		c.ShouldBindJSON(&input)
+
 		if err := DB.Model(&item).Updates(input).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			me, ok := err.(*mysql.MySQLError)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, nil)
+				return
+			}
+
+			errors := []string{fmt.Sprintf("Error %v: %v", me.Number, me.Message)}
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errors})
+			return
 		} else {
 			c.JSON(http.StatusNoContent, nil)
 		}
