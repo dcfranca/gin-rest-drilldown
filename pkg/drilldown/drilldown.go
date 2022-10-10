@@ -1,4 +1,4 @@
-package main
+package drilldown
 
 import (
 	"flag"
@@ -439,13 +439,4 @@ func setupRouter() *gin.Engine {
 
 func registerModels(r *gin.Engine) {
 	registerModel(r, User{}, "/users")
-}
-
-func main() {
-	r := setupRouter()
-	registerModels(r)
-	// Listen and Server in 0.0.0.0:8080
-	ConnectDatabase("root:secret@/testdb?charset=utf8&parseTime=True&loc=Local")
-	DB.AutoMigrate(&User{})
-	r.Run(":8080")
 }

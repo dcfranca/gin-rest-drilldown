@@ -1,4 +1,4 @@
-package main
+package drilldown
 
 import (
 	"bytes"
@@ -764,8 +764,8 @@ func TestUpdates(t *testing.T) {
 	defer db.Close()
 	defer container.Terminate(ctx)
 
-	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
+	DB.AutoMigrate(&Book{})
 	registerModel(router, Book{}, "books")
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
@@ -781,15 +781,6 @@ func TestUpdates(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPut, "/books/999", bytes.NewBufferString(`{"title":"Invalid"}`))
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
-
-	// TODO: Test trying to update with non existent dependence / Foreign key
-	// w = httptest.NewRecorder()
-	// req, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("/books/%v", book.ID), bytes.NewBufferString(`{"author_id": 999}`))
-	// router.ServeHTTP(w, req)
-
-	// assert.Equal(t, http.StatusBadRequest, w.Code)
-	// json.Unmarshal(w.Body.Bytes(), &response)
-	// assert.Equal(t, "AuthorID : failed on tag validation: required", response["errors"].([]interface{})[0])
 
 	// Test Update successful
 	w = httptest.NewRecorder()
