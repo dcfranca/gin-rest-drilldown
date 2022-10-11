@@ -133,7 +133,7 @@ func TestFullFlow(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	registerModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books")
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)
@@ -236,7 +236,7 @@ func TestQueries(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	registerModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books")
 
 	chuckPalahniuk := Author{Name: stringPtr("Chuck Palahniuk")}
 	richardGreene := Author{Name: stringPtr("Richard Greene")}
@@ -632,8 +632,8 @@ func TestGetItem(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	registerModel(router, Book{}, "books")
-	registerModel(router, Author{}, "authors")
+	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Author{}, "authors")
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)
@@ -690,8 +690,8 @@ func TestInserts(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	registerModel(router, Book{}, "books")
-	registerModel(router, Author{}, "authors")
+	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Author{}, "authors")
 
 	var response map[string]interface{}
 	path := "/books"
@@ -766,7 +766,7 @@ func TestUpdates(t *testing.T) {
 
 	DB.AutoMigrate(&Author{})
 	DB.AutoMigrate(&Book{})
-	registerModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books")
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)
@@ -810,7 +810,7 @@ func TestDeletes(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	registerModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books")
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)

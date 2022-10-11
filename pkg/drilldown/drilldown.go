@@ -176,7 +176,7 @@ func IsTestRun() bool {
 	return flag.Lookup("test.v").Value.(flag.Getter).Get().(bool)
 }
 
-func registerModel[M any](r *gin.Engine, m M, resource string) {
+func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 
 	path := "/" + resource
 	pathItem := fmt.Sprintf("%v/:id", path)
@@ -435,8 +435,4 @@ func setupRouter() *gin.Engine {
 	})
 
 	return r
-}
-
-func registerModels(r *gin.Engine) {
-	registerModel(r, User{}, "/users")
 }
