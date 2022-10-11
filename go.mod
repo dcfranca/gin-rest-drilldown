@@ -1,4 +1,4 @@
-module rest-drilldown
+module github.com/dcfranca/gin-rest-drilldown
 
 go 1.19
 
