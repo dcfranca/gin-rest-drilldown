@@ -31,9 +31,10 @@ type Book struct {
 
 You should be able to register a basic CRUD REST interface just adding:
 ```
-	registerModel(router, Book{}, "books")
-	registerModel(router, Author{}, "authors")
+	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Author{}, "authors")
 ```
+The first argument is the Gin router (*gin.Engine), the second argument is the instance of the model, and the last argument is the resource path on the URL
 
 For example, this will create the following routes for the books:
 
