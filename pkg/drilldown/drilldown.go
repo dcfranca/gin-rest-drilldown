@@ -34,6 +34,8 @@ type OrderBy struct {
 	Modifier string
 }
 
+var DB *gorm.DB
+
 func isReservedField(f string) bool {
 
 	if f == "fields" || f == "order" || f == "limit" || f == "offset" {
@@ -426,7 +428,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 	})
 }
 
-func setupRouter() *gin.Engine {
+func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
 	// Healthcheck test

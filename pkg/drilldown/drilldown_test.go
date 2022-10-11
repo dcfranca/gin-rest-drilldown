@@ -14,6 +14,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 
 	"github.com/docker/go-connections/nat"
 	_ "github.com/go-sql-driver/mysql"
@@ -42,6 +44,16 @@ type Book struct {
 func init() {
 	testing.Init()
 	flag.Parse()
+}
+
+func ConnectDatabase(connectionString string) {
+	database, err := gorm.Open(mysql.Open(connectionString))
+
+	if err != nil {
+		panic("Failed to connect to database!")
+	}
+
+	DB = database
 }
 
 func CreateTestContainer(ctx context.Context, dbname string) (testcontainers.Container, *sql.DB, string, error) {
@@ -108,7 +120,7 @@ func initializeTestDatabase(t *testing.T) (*gin.Engine, context.Context, *sql.DB
 	}
 
 	ConnectDatabase(connectionString)
-	router := setupRouter()
+	router := SetupRouter()
 	return router, ctx, db, container
 }
 
