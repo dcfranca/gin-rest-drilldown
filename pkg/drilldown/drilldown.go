@@ -175,7 +175,12 @@ func removePlural(s string) string {
 }
 
 func IsTestRun() bool {
-	return flag.Lookup("test.v").Value.(flag.Getter).Get().(bool)
+	f := flag.Lookup("test.v")
+	if f == nil {
+		return false
+	}
+
+	return f.Value.(flag.Getter).Get().(bool)
 }
 
 func RegisterModel[M any](r *gin.Engine, m M, resource string) {
