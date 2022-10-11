@@ -11,30 +11,60 @@ Assuming you have the following models:
 
 ```
 type Author struct {
+	gorm.Model
 	ID        uint64  `json:"id"`
 	Name      *string `json:"name" gorm:"index:idx_name,unique" binding:"required"`
 	Books     []Book
-	UpdatedAt uint8 `json:"updated_at,omitempty"`
-	CreatedAt uint8 `json:"created_at,omitempty"`
 }
 
 type Book struct {
-	ID        uint64  `json:"id"`
-	Title     *string `json:"title,omitempty" gorm:"not null"`
+	gorm.Model
 	AuthorID  uint64  `json:"author_id,omitempty" binding:"required"`
 	Genre     *string `json:"genre,omitempty"`
 	Pages     *int    `json:"pages,omitempty"`
-	UpdatedAt uint64  `json:"updated_at,omitempty"`
-	CreatedAt uint64  `json:"created_at,omitempty"`
 }
 ```
 
 You should be able to register a basic CRUD REST interface just adding:
 ```
-	RegisterModel(router, Book{}, "books")
-	RegisterModel(router, Author{}, "authors")
+	drilldown.RegisterModel(router, Book{}, "books")
+	drilldown.RegisterModel(router, Author{}, "authors")
 ```
 The first argument is the Gin router (*gin.Engine), the second argument is the instance of the model, and the last argument is the resource path on the URL
+
+Full code connecting to Sqlite database
+
+```
+package main
+
+import (
+	drilldown "github.com/dcfranca/gin-rest-drilldown/pkg/drilldown"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+func main() {
+	db, err := gorm.Open(sqlite.Open("test.db"))
+
+	if err != nil {
+		panic("Failed to connect to database!")
+	}
+
+	drilldown.DB = db
+
+	// Instantiate the router and creates a healthcheck endpoint
+	router := drilldown.SetupRouter()
+
+	drilldown.DB.AutoMigrate(&Book{})
+	drilldown.DB.AutoMigrate(&Author{})
+
+	drilldown.RegisterModel(router, Book{}, "books")
+	drilldown.RegisterModel(router, Author{}, "authors")
+
+	router.Run()
+}
+
+```
 
 For example, this will create the following routes for the books:
 
