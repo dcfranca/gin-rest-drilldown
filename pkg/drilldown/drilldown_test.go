@@ -41,6 +41,11 @@ type Book struct {
 	CreatedAt uint64  `json:"created_at,omitempty"`
 }
 
+type ItemStringID struct {
+	ID   *string `json:"id" gorm:"primarykey"`
+	Name *string `json:"name" binding:"required"`
+}
+
 func init() {
 	testing.Init()
 	flag.Parse()
@@ -693,6 +698,31 @@ func TestGetItem(t *testing.T) {
 	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGetItemStringID(t *testing.T) {
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&ItemStringID{})
+	RegisterModel(router, ItemStringID{}, "items")
+
+	item := ItemStringID{ID: stringPtr("myid1"), Name: stringPtr("Test 123")}
+	DB.Create(&item)
+
+	// Test Get item success
+	w := httptest.NewRecorder()
+	singleUrl := fmt.Sprintf("/items/%v", *item.ID)
+	req, _ := http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItem, _ := response["data"].(map[string]interface{})
+	assert.Equal(t, *item.ID, dataItem["id"])
+	assert.Equal(t, "Test 123", dataItem["name"])
 }
 
 func TestInserts(t *testing.T) {

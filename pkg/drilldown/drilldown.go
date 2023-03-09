@@ -152,7 +152,7 @@ func prepareOrderBy(orderBy string, c chan []OrderBy) {
 	c <- preparedOrderBy
 }
 
-func getIDParam(c *gin.Context) (uint64, error) {
+func getIDParamInt(c *gin.Context) (uint64, error) {
 	idS, ok := c.Params.Get("id")
 	if !ok {
 		return 0, fmt.Errorf("invalid ID")
@@ -164,6 +164,48 @@ func getIDParam(c *gin.Context) (uint64, error) {
 	}
 
 	return uint64(id), nil
+}
+
+func getIDParamString(c *gin.Context) (*string, error) {
+	id, ok := c.Params.Get("id")
+	if !ok {
+		return nil, fmt.Errorf("invalid ID")
+	}
+
+	return &id, nil
+}
+
+func GetItem[M any](c *gin.Context) (error, *M, uint64, *string) {
+	var item M
+	var idInt uint64
+	var idString *string
+	var err error
+
+	v := reflect.ValueOf(item)
+	if v.FieldByName("ID").Type().Name() == "uint64" {
+		idInt, err = getIDParamInt(c)
+	} else {
+		idString, err = getIDParamString(c)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err})
+		return err, nil, idInt, idString
+	}
+
+	if idString != nil {
+		if err = DB.First(&item, idString).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
+			return err, nil, idInt, idString
+		}
+	} else {
+		if err = DB.First(&item, idInt).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
+			return err, nil, idInt, idString
+		}
+	}
+
+	return nil, &item, idInt, idString
 }
 
 func removePlural(s string) string {
@@ -333,15 +375,8 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 	})
 
 	r.GET(pathItem, func(c *gin.Context) {
-		var item M
-		id, err := getIDParam(c)
+		err, item, _, _ := GetItem[M](c)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": err})
-			return
-		}
-
-		if err = DB.First(&item, id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return
 		}
 
@@ -384,14 +419,8 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 
 	r.PUT(pathItem, func(c *gin.Context) {
 		var input M
-		var item M
-		id, err := getIDParam(c)
+		err, item, _, _ := GetItem[M](c)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": err})
-		}
-
-		if err = DB.First(&item, id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return
 		}
 
@@ -413,20 +442,21 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 	})
 
 	r.DELETE(pathItem, func(c *gin.Context) {
-		var item M
-		id, err := getIDParam(c)
+		err, item, idInt, idStr := GetItem[M](c)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": err})
-		}
-
-		if err = DB.First(&item, id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return
 		}
 
-		if err := DB.Delete(&item, id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
-			return
+		if idStr != nil {
+			if err := DB.Delete(&item, idStr).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
+				return
+			}
+		} else {
+			if err := DB.Delete(&item, idInt).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
+				return
+			}
 		}
 
 		c.JSON(http.StatusNoContent, nil)
