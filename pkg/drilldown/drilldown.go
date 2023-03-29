@@ -194,12 +194,12 @@ func GetItem[M any](c *gin.Context) (error, *M, uint64, *string) {
 	}
 
 	if idString != nil {
-		if err = DB.First(&item, idString).Error; err != nil {
+		if err = DB.WithContext(c).First(&item, idString).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return err, nil, idInt, idString
 		}
 	} else {
-		if err = DB.First(&item, idInt).Error; err != nil {
+		if err = DB.WithContext(c).First(&item, idInt).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return err, nil, idInt, idString
 		}
@@ -401,7 +401,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 			return
 		}
 
-		if err := DB.Create(&input).Error; err != nil {
+		if err := DB.WithContext(c).Create(&input).Error; err != nil {
 			me, ok := err.(*mysql.MySQLError)
 			if !ok {
 				c.JSON(http.StatusInternalServerError, nil)
@@ -426,7 +426,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 
 		c.ShouldBindJSON(&input)
 
-		if err := DB.Model(&item).Updates(input).Error; err != nil {
+		if err := DB.WithContext(c).Model(&item).Updates(input).Error; err != nil {
 			me, ok := err.(*mysql.MySQLError)
 			if !ok {
 				c.JSON(http.StatusInternalServerError, nil)
@@ -448,7 +448,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 		}
 
 		if idStr != nil {
-			if err := DB.Delete(&item, idStr).Error; err != nil {
+			if err := DB.WithContext(c).Delete(&item, idStr).Error; err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 				return
 			}
