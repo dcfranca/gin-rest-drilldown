@@ -34,6 +34,10 @@ type OrderBy struct {
 	Modifier string
 }
 
+type ApiConfig struct {
+	LookupField string
+}
+
 var DB *gorm.DB
 
 func isReservedField(f string) bool {
@@ -152,40 +156,47 @@ func prepareOrderBy(orderBy string, c chan []OrderBy) {
 	c <- preparedOrderBy
 }
 
-func getIDParamInt(c *gin.Context) (uint64, error) {
-	idS, ok := c.Params.Get("id")
+func getIDParamInt(c *gin.Context, lookupField string) (uint64, error) {
+	idS, ok := c.Params.Get(lookupField)
 	if !ok {
-		return 0, fmt.Errorf("invalid ID")
+		return 0, fmt.Errorf("invalid ID (%v)", lookupField)
 	}
 
 	id, err := strconv.Atoi(idS)
 	if err != nil {
-		return 0, fmt.Errorf("invalid ID %v", err)
+		return 0, fmt.Errorf("invalid ID (%v) %v", lookupField, err)
 	}
 
 	return uint64(id), nil
 }
 
-func getIDParamString(c *gin.Context) (*string, error) {
-	id, ok := c.Params.Get("id")
+func getIDParamString(c *gin.Context, lookupField string) (*string, error) {
+	id, ok := c.Params.Get(lookupField)
 	if !ok {
-		return nil, fmt.Errorf("invalid ID")
+		return nil, fmt.Errorf("invalid ID (%v)", lookupField)
 	}
 
 	return &id, nil
 }
 
-func GetItem[M any](c *gin.Context) (error, *M, uint64, *string) {
+func GetItem[M any](c *gin.Context, config *ApiConfig) (error, *M, uint64, *string) {
 	var item M
 	var idInt uint64
 	var idString *string
 	var err error
 
 	v := reflect.ValueOf(item)
-	if v.FieldByName("ID").Type().Name() == "uint64" {
-		idInt, err = getIDParamInt(c)
+
+	lookupField := "ID"
+	if config != nil && config.LookupField != "" {
+		lookupField = config.LookupField
+	}
+	lowerLookupField := strings.ToLower(lookupField)
+
+	if v.FieldByName(lookupField).Type().Name() == "uint64" {
+		idInt, err = getIDParamInt(c, lowerLookupField)
 	} else {
-		idString, err = getIDParamString(c)
+		idString, err = getIDParamString(c, lowerLookupField)
 	}
 
 	if err != nil {
@@ -193,13 +204,15 @@ func GetItem[M any](c *gin.Context) (error, *M, uint64, *string) {
 		return err, nil, idInt, idString
 	}
 
+	whereClause := fmt.Sprintf("%s = ?", lowerLookupField)
+
 	if idString != nil {
-		if err = DB.WithContext(c).First(&item, idString).Error; err != nil {
+		if err = DB.WithContext(c).Where(whereClause, idString).First(&item).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return err, nil, idInt, idString
 		}
 	} else {
-		if err = DB.WithContext(c).First(&item, idInt).Error; err != nil {
+		if err = DB.WithContext(c).Where(whereClause, idInt).First(&item, idInt).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return err, nil, idInt, idString
 		}
@@ -225,10 +238,14 @@ func IsTestRun() bool {
 	return f.Value.(flag.Getter).Get().(bool)
 }
 
-func RegisterModel[M any](r *gin.Engine, m M, resource string) {
+func RegisterModel[M any](r *gin.Engine, m M, resource string, config *ApiConfig) {
 
 	path := "/" + resource
-	pathItem := fmt.Sprintf("%v/:id", path)
+	lookupField := "id"
+	if config != nil && config.LookupField != "" {
+		lookupField = strings.ToLower(config.LookupField)
+	}
+	pathItem := fmt.Sprintf("%v/:%v", path, lookupField)
 
 	r.GET(path, func(c *gin.Context) {
 		qmap := c.Request.URL.Query()
@@ -375,7 +392,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 	})
 
 	r.GET(pathItem, func(c *gin.Context) {
-		err, item, _, _ := GetItem[M](c)
+		err, item, _, _ := GetItem[M](c, config)
 		if err != nil {
 			return
 		}
@@ -419,7 +436,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 
 	r.PUT(pathItem, func(c *gin.Context) {
 		var input M
-		err, item, _, _ := GetItem[M](c)
+		err, item, _, _ := GetItem[M](c, config)
 		if err != nil {
 			return
 		}
@@ -442,18 +459,25 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string) {
 	})
 
 	r.DELETE(pathItem, func(c *gin.Context) {
-		err, item, idInt, idStr := GetItem[M](c)
+		err, item, idInt, idStr := GetItem[M](c, config)
 		if err != nil {
 			return
 		}
 
+		lookupField := "ID"
+		if config != nil && config.LookupField != "" {
+			lookupField = config.LookupField
+		}
+		lowerLookupField := strings.ToLower(lookupField)
+		whereClause := fmt.Sprintf("%s = ?", lowerLookupField)
+
 		if idStr != nil {
-			if err := DB.WithContext(c).Delete(&item, idStr).Error; err != nil {
+			if err := DB.WithContext(c).Where(whereClause, idStr).Delete(&item).Error; err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 				return
 			}
 		} else {
-			if err := DB.Delete(&item, idInt).Error; err != nil {
+			if err := DB.WithContext(c).Where(whereClause, idInt).Delete(&item).Error; err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 				return
 			}

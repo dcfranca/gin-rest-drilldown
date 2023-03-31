@@ -37,6 +37,7 @@ type Book struct {
 	AuthorID  uint64  `json:"author_id,omitempty" binding:"required"`
 	Genre     *string `json:"genre,omitempty"`
 	Pages     *int    `json:"pages,omitempty"`
+	Slug      *string `json:"slug,omitempty"`
 	UpdatedAt uint64  `json:"updated_at,omitempty"`
 	CreatedAt uint64  `json:"created_at,omitempty"`
 }
@@ -150,7 +151,7 @@ func TestFullFlow(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books", &ApiConfig{})
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)
@@ -238,6 +239,101 @@ func TestFullFlow(t *testing.T) {
 	assert.Len(t, dataItems, 0)
 }
 
+func TestDifferentLookupField(t *testing.T) {
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&Book{})
+	RegisterModel(router, Book{}, "books", &ApiConfig{LookupField: "Slug"})
+
+	path := "/books"
+
+	// Test get books empty
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, path, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItems, _ := response["data"].([]interface{})
+	assert.Len(t, dataItems, 0)
+
+	// Test insert new record
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"title":"Fight Club", "author_id": 1, "slug": "fight-club"}`))
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	data, _ := response["data"].(map[string]interface{})
+	title := data["title"]
+	slug := data["slug"]
+	assert.Equal(t, title, "Fight Club")
+	assert.Equal(t, slug, "fight-club")
+
+	// Test get list of books
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, path, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItems, _ = response["data"].([]interface{})
+	assert.Len(t, dataItems, 1)
+
+	// Test get single book
+	w = httptest.NewRecorder()
+	singleUrl := fmt.Sprintf("/books/%v", data["slug"])
+	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItem, _ := response["data"].(map[string]interface{})
+	title = dataItem["title"]
+	slug = dataItem["slug"]
+	assert.Equal(t, title, "Fight Club")
+	assert.Equal(t, slug, "fight-club")
+
+	// Update record
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPut, singleUrl, bytes.NewBufferString(`{"author_id": 1, "pages": 279}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// Test get single record updated
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	data, _ = response["data"].(map[string]interface{})
+	title = data["title"]
+	pages := data["pages"]
+	assert.Equal(t, "Fight Club", title)
+	assert.Equal(t, float64(279), pages)
+
+	// Test delete record
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodDelete, singleUrl, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	// Test get records empty again
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, path, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItems, _ = response["data"].([]interface{})
+	assert.Len(t, dataItems, 0)
+}
+
 func stringPtr(s string) *string {
 	return &s
 }
@@ -253,7 +349,7 @@ func TestQueries(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books", &ApiConfig{})
 
 	chuckPalahniuk := Author{Name: stringPtr("Chuck Palahniuk")}
 	richardGreene := Author{Name: stringPtr("Richard Greene")}
@@ -649,8 +745,8 @@ func TestGetItem(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	RegisterModel(router, Book{}, "books")
-	RegisterModel(router, Author{}, "authors")
+	RegisterModel(router, Book{}, "books", &ApiConfig{})
+	RegisterModel(router, Author{}, "authors", nil)
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)
@@ -706,7 +802,7 @@ func TestGetItemStringID(t *testing.T) {
 	defer container.Terminate(ctx)
 
 	DB.AutoMigrate(&ItemStringID{})
-	RegisterModel(router, ItemStringID{}, "items")
+	RegisterModel(router, ItemStringID{}, "items", &ApiConfig{})
 
 	item := ItemStringID{ID: stringPtr("myid1"), Name: stringPtr("Test 123")}
 	DB.Create(&item)
@@ -732,8 +828,8 @@ func TestInserts(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	RegisterModel(router, Book{}, "books")
-	RegisterModel(router, Author{}, "authors")
+	RegisterModel(router, Book{}, "books", nil)
+	RegisterModel(router, Author{}, "authors", nil)
 
 	var response map[string]interface{}
 	path := "/books"
@@ -808,7 +904,7 @@ func TestUpdates(t *testing.T) {
 
 	DB.AutoMigrate(&Author{})
 	DB.AutoMigrate(&Book{})
-	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books", nil)
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)
@@ -852,7 +948,7 @@ func TestDeletes(t *testing.T) {
 
 	DB.AutoMigrate(&Book{})
 	DB.AutoMigrate(&Author{})
-	RegisterModel(router, Book{}, "books")
+	RegisterModel(router, Book{}, "books", nil)
 
 	author := Author{Name: stringPtr("Chuck Palahniuk")}
 	DB.Create(&author)

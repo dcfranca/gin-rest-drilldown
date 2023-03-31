@@ -27,8 +27,8 @@ type Book struct {
 
 You should be able to register a basic CRUD REST interface just adding:
 ```
-	drilldown.RegisterModel(router, Book{}, "books")
-	drilldown.RegisterModel(router, Author{}, "authors")
+	drilldown.RegisterModel(router, Book{}, "books", nil)
+	drilldown.RegisterModel(router, Author{}, "authors", nil)
 ```
 The first argument is the Gin router (*gin.Engine), the second argument is the instance of the model, and the last argument is the resource path on the URL
 
@@ -58,8 +58,8 @@ func main() {
 	drilldown.DB.AutoMigrate(&Book{})
 	drilldown.DB.AutoMigrate(&Author{})
 
-	drilldown.RegisterModel(router, Book{}, "books")
-	drilldown.RegisterModel(router, Author{}, "authors")
+	drilldown.RegisterModel(router, Book{}, "books", nil)
+	drilldown.RegisterModel(router, Author{}, "authors", nil)
 
 	router.Run()
 }
@@ -116,3 +116,28 @@ Paginate your results with `offset` and `limit`
 ```
 GET /books?fields=title,authors.name&order=author.name&offset=21&limit=20
 ```
+
+You can also use a different lookup field for single item path
+For example, here there is a field Slug, you can use it as the lookup field:
+```
+type Book struct {
+	gorm.Model
+	AuthorID  uint64  `json:"author_id,omitempty" binding:"required"`
+	Genre     *string `json:"genre,omitempty"`
+	Pages     *int    `json:"pages,omitempty"`
+	Slug      *string `json:"slug,omitempty" binding:"required"
+}
+```
+
+To do that you need to pass an extra parameter, `*Apiconfig`, to the registerModel call
+
+```
+drilldown.RegisterModel(router, Book{}, "books", &ApiConfig{LookupField: "Slug"})
+```
+
+Now the URLs will be as follow:
+`GET /books`
+`GET    /books/:slug`
+`POST   /books`
+`PUT    /books/:slug`
+`DELETE /books/:slug`
