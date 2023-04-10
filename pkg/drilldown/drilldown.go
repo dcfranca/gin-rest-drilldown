@@ -180,7 +180,7 @@ func getIDParamString(c *gin.Context, lookupField string) (*string, error) {
 	return &id, nil
 }
 
-func GetItem[M any](c *gin.Context, config *ApiConfig) (error, *M, uint64, *string) {
+func GetItem[M any](c *gin.Context, config *ApiConfig, method string) (error, *M, uint64, *string) {
 	var item M
 	var idInt uint64
 	var idString *string
@@ -207,7 +207,7 @@ func GetItem[M any](c *gin.Context, config *ApiConfig) (error, *M, uint64, *stri
 
 	whereClause := fmt.Sprintf("%s = ?", lowerLookupField)
 
-	if config != nil && len(config.ScopesFind) > 0 {
+	if config != nil && len(config.ScopesFind) > 0 && method == "GET" {
 		DB = DB.WithContext(c).Scopes(config.ScopesFind...)
 	} else {
 		DB = DB.WithContext(c)
@@ -403,7 +403,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string, config *ApiConfig
 	})
 
 	r.GET(pathItem, func(c *gin.Context) {
-		err, item, _, _ := GetItem[M](c, config)
+		err, item, _, _ := GetItem[M](c, config, "GET")
 		if err != nil {
 			return
 		}
@@ -447,7 +447,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string, config *ApiConfig
 
 	r.PUT(pathItem, func(c *gin.Context) {
 		var input M
-		err, item, _, _ := GetItem[M](c, config)
+		err, item, _, _ := GetItem[M](c, config, "PUT")
 		if err != nil {
 			return
 		}
@@ -470,7 +470,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string, config *ApiConfig
 	})
 
 	r.DELETE(pathItem, func(c *gin.Context) {
-		err, item, idInt, idStr := GetItem[M](c, config)
+		err, item, idInt, idStr := GetItem[M](c, config, "DELETE")
 		if err != nil {
 			return
 		}
