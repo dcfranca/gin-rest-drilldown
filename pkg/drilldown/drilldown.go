@@ -208,16 +208,18 @@ func GetItem[M any](c *gin.Context, config *ApiConfig) (error, *M, uint64, *stri
 	whereClause := fmt.Sprintf("%s = ?", lowerLookupField)
 
 	if config != nil && len(config.ScopesFind) > 0 {
-		DB = DB.Scopes(config.ScopesFind...)
+		DB = DB.WithContext(c).Scopes(config.ScopesFind...)
+	} else {
+		DB = DB.WithContext(c)
 	}
 
 	if idString != nil {
-		if err = DB.WithContext(c).Where(whereClause, idString).First(&item).Error; err != nil {
+		if err = DB.Where(whereClause, idString).First(&item).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return err, nil, idInt, idString
 		}
 	} else {
-		if err = DB.WithContext(c).Where(whereClause, idInt).First(&item, idInt).Error; err != nil {
+		if err = DB.Where(whereClause, idInt).First(&item, idInt).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
 			return err, nil, idInt, idString
 		}
@@ -264,7 +266,7 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string, config *ApiConfig
 		}
 
 		if config != nil && len(config.ScopesFind) > 0 {
-			q = q.Scopes(config.ScopesFind...)
+			q = q.WithContext(c).Scopes(config.ScopesFind...)
 		}
 
 		selectChan := make(chan Select)
