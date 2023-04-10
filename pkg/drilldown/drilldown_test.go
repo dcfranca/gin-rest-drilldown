@@ -738,6 +738,63 @@ func TestQueries(t *testing.T) {
 	// TODO: Why integers are float?
 }
 
+func FilterSciFi(db *gorm.DB) *gorm.DB {
+	return db.Model(&Book{}).Where("genre = ?", "scifi")
+}
+
+func TestScope(t *testing.T) {
+	router, ctx, db, container := initializeTestDatabase(t)
+	defer db.Close()
+	defer container.Terminate(ctx)
+
+	DB.AutoMigrate(&Book{})
+	DB.AutoMigrate(&Author{})
+	RegisterModel(router, Book{}, "books", &ApiConfig{
+		ScopesFind: []func(db *gorm.DB) *gorm.DB{FilterSciFi},
+	})
+
+	chuckPalahniuk := Author{Name: stringPtr("Chuck Palahniuk")}
+	richardGreene := Author{Name: stringPtr("Richard Greene")}
+	robertHoward := Author{Name: stringPtr("Robert E Howard")}
+	anthonyBurgess := Author{Name: stringPtr("Anthony Burgess")}
+	isaacAsimov := Author{Name: stringPtr("Isaac Asimov")}
+
+	DB.Create(&chuckPalahniuk)
+	DB.Create(&richardGreene)
+	DB.Create(&robertHoward)
+	DB.Create(&anthonyBurgess)
+	DB.Create(&isaacAsimov)
+
+	books := []Book{
+		{Title: stringPtr("Fight Club"), AuthorID: chuckPalahniuk.ID, Pages: intPtr(279)},
+		{Title: stringPtr("Survivor"), AuthorID: chuckPalahniuk.ID, Pages: intPtr(353)},
+		{Title: stringPtr("Haunted"), AuthorID: chuckPalahniuk.ID, Pages: intPtr(692), Genre: stringPtr("Horror")},
+		{Title: stringPtr("Fight Story"), AuthorID: robertHoward.ID, Pages: intPtr(75)},
+		{Title: stringPtr("American Horror Story"), AuthorID: richardGreene.ID, Pages: intPtr(225)},
+		{Title: stringPtr("A Clockwork Orange"), AuthorID: anthonyBurgess.ID, Pages: intPtr(175)},
+		{Title: stringPtr("Prelude to Foundation"), AuthorID: isaacAsimov.ID, Pages: intPtr(481), Genre: stringPtr("SciFi")},
+		{Title: stringPtr("Nightfall"), AuthorID: isaacAsimov.ID, Pages: intPtr(501), Genre: stringPtr("SciFi")},
+	}
+
+	for _, b := range books {
+		DB.Create(&b)
+	}
+
+	path := "/books"
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, path, nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	dataItems := response["data"].([]interface{})
+	assert.Len(t, dataItems, 2)
+	assert.Equal(t, "Prelude to Foundation", dataItems[0].(map[string]interface{})["title"])
+	assert.Equal(t, "Nightfall", dataItems[1].(map[string]interface{})["title"])
+}
+
 func TestGetItem(t *testing.T) {
 	router, ctx, db, container := initializeTestDatabase(t)
 	defer db.Close()

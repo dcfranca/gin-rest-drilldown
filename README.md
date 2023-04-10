@@ -69,10 +69,15 @@ func main() {
 For example, this will create the following routes for the books:
 
 `GET /books`
+
 `GET    /books/:id`
+
 `POST   /books`
+
 `PUT    /books/:id`
+
 `DELETE /books/:id`
+
 
 The `GET /books` endpoint allows for more complex queries
 Example of some of the possible queries:
@@ -137,7 +142,29 @@ drilldown.RegisterModel(router, Book{}, "books", &ApiConfig{LookupField: "Slug"}
 
 Now the URLs will be as follow:
 `GET /books`
+
 `GET    /books/:slug`
+
 `POST   /books`
+
 `PUT    /books/:slug`
+
 `DELETE /books/:slug`
+
+You can also add custom Gorm [scopes](https://gorm.io/docs/scopes.html) to query items
+
+Ex:
+```
+func FilterSciFi(db *gorm.DB) *gorm.DB {
+	return db.Model(&Book{}).Where("genre = ?", "scifi")
+}
+
+...
+	DB.AutoMigrate(&Book{})
+	RegisterModel(router, Book{}, "books", &ApiConfig{
+		ScopesFind: []func(db *gorm.DB) *gorm.DB{FilterSciFi},
+	})
+...
+```
+
+This will filter only books of the scifi genre

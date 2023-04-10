@@ -36,6 +36,7 @@ type OrderBy struct {
 
 type ApiConfig struct {
 	LookupField string
+	ScopesFind  []func(db *gorm.DB) *gorm.DB
 }
 
 var DB *gorm.DB
@@ -206,6 +207,10 @@ func GetItem[M any](c *gin.Context, config *ApiConfig) (error, *M, uint64, *stri
 
 	whereClause := fmt.Sprintf("%s = ?", lowerLookupField)
 
+	if config != nil && len(config.ScopesFind) > 0 {
+		DB = DB.Scopes(config.ScopesFind...)
+	}
+
 	if idString != nil {
 		if err = DB.WithContext(c).Where(whereClause, idString).First(&item).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record not found!"})
@@ -256,6 +261,10 @@ func RegisterModel[M any](r *gin.Engine, m M, resource string, config *ApiConfig
 			q = DB.Debug().Table(resource)
 		} else {
 			q = DB.Table(resource)
+		}
+
+		if config != nil && len(config.ScopesFind) > 0 {
+			q = q.Scopes(config.ScopesFind...)
 		}
 
 		selectChan := make(chan Select)
